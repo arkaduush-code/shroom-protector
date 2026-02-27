@@ -44,11 +44,6 @@
 <body>
 
     <div class="header-container">
-        <div id="startOverlay">
-            <h1 style="color:#00ffcc; font-size: 50px;">SYSTEM ONLINE</h1>
-            <button class="btn-start" onclick="startGame()">START DEFENSE</button>
-            <div class="credit" style="margin-top: 20px; color: white;">Original Electronic Score Loaded</div>
-        </div>
         <div class="header-logo">👽🍄</div>
         <h2>THE SHROOM PROTECTOR</h2>
         <div class="header-logo">🍄👽</div>
@@ -68,6 +63,11 @@
     </div>
 
     <div class="game-wrapper">
+        <div id="startOverlay">
+            <h1 style="color:#00ffcc; font-size: 50px;">SYSTEM ONLINE</h1>
+            <button class="btn-start" onclick="startGame()">START DEFENSE</button>
+        </div>
+        
         <div class="scanlines"></div>
         <canvas id="gameCanvas" width="1200" height="750"></canvas>
     </div>
@@ -90,13 +90,13 @@
         audio.loop = true;
 
         function startGame() {
-            // 1. Hide the start screen overlay
+            // Hide the start screen overlay
             document.getElementById('startOverlay').style.display = 'none';
             
-            // 2. Trigger the music
+            // Trigger the music
             audio.play().catch(e => console.log("Audio error. Check track1.mp3 file size."));
             
-            // 3. Start the actual game systems
+            // Start the actual game systems
             spawnWave();
             updateHP();
             animate();
