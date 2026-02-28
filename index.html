@@ -4,6 +4,8 @@
     <title>The Shroom Protector</title>
     <meta name="x-ogp-key" content="657c89e6-1d39-472f-aa21-b6ef8dc732ff" id="ogp-key-meta" />
     
+    <script src="https://sdk.play.fun/sdk.js"></script>
+
     <style>
         body { 
             margin: 0; background-color: #020202; color: #00ffcc; 
@@ -12,7 +14,7 @@
         }
         
         .header-container { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 10px; margin-bottom: 5px; }
-        .header-logo { font-size: 25px; text-shadow: 0px 0px 20px #00ffcc; }
+        .header-logo { font-size: 25px; text-shadow: 0px 0px 20px #00ffcc; filter: drop-shadow(0px 0px 10px rgba(0, 255, 204, 0.8)); }
         h2 { margin: 0; color: #00ffcc; letter-spacing: 3px; text-shadow: 0px 0px 10px #00ffcc; font-size: 22px;}
         
         #gameHUD { 
@@ -39,8 +41,8 @@
         #startOverlay, #gameOverScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
         #gameOverScreen { display: none; border: 4px solid #ff0000; box-shadow: inset 0px 0px 50px #ff0000; }
         
-        .btn-start { background: #00ffcc; color: #000; border: none; padding: 20px 50px; font-size: 30px; font-weight: bold; cursor: pointer; border-radius: 10px; box-shadow: 0 0 20px #00ffcc; transition: 0.2s; }
-        .btn-start:hover { transform: scale(1.05); box-shadow: 0 0 40px #00ffcc; background: #33ffdd; }
+        .btn-start { background: #00ffcc; color: #000; border: none; padding: 20px 50px; font-size: 30px; font-weight: bold; cursor: pointer; border-radius: 10px; box-shadow: 0 0 20px #00ffcc; transition: 0.3s; }
+        .btn-start:hover { transform: scale(1.1); background: #fff; }
 
         #modeDisplay { background-color: #00ffcc; color: black; padding: 3px 15px; font-size: 14px; border-radius: 5px; font-weight: bold; box-shadow: 0px 0px 10px #00ffcc; min-width: 120px; }
         #modeDisplay.manual { background-color: #ff00ff; box-shadow: 0px 0px 10px #ff00ff; color: white; }
@@ -66,7 +68,8 @@
 
     <div class="game-wrapper">
         <div id="startOverlay">
-            <h1 style="color:#00ffcc; font-size: 45px; margin-bottom: 20px;">SYSTEM READY</h1>
+            <h1 style="color:#00ffcc; font-size: 45px; margin-bottom: 20px;">SYSTEM ONLINE</h1>
+            <p style="color:white; margin-bottom: 30px;">Upgraded Audio Engine Loaded</p>
             <button class="btn-start" onclick="startGame()">START DEFENSE</button>
         </div>
         
@@ -88,24 +91,19 @@
     </div>
 
     <script>
-        // CORE VARIABLES
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
-        let lastShotTime = 0, lastHeadRocketTime = 0, bossAlertText = "", bossAlertTimer = 0;
-        const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
-        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
-        let projectiles = [], enemies = [], bossProjectiles = [], particles = [], activeBoss = null, screenShake = 0, stars = [];
-        
-        for (let i = 0; i < 150; i++) stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, radius: Math.random() * 2 + 0.5, speed: Math.random() * 3 + 0.5, alpha: Math.random() });
+        // --- INITIALIZE PLAY.FUN SDK ---
+        const ogp = new OpenGameSDK();
+        ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
 
-        // AUDIO ENGINE WITH SAFETY SHIELD
-        let audioCtx, musicInterval;
+        // --- UPGRADED NATIVE SYNTH ENGINE ---
+        let audioCtx;
+        let musicInterval;
+
         function initAudio() {
             try {
                 if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 if (audioCtx.state === 'suspended') audioCtx.resume();
-            } catch(e) { console.log("Audio not supported by browser."); }
+            } catch(e) { console.log("Audio not supported"); }
         }
 
         function playRetroMusic() {
@@ -116,20 +114,47 @@
             musicInterval = setInterval(() => {
                 try {
                     if(!audioCtx || isGameOver) return;
-                    let osc = audioCtx.createOscillator();
+                    let time = audioCtx.currentTime;
+
+                    // 1. Synth Bassline (Fat Dual Oscillator)
+                    let osc1 = audioCtx.createOscillator();
+                    let osc2 = audioCtx.createOscillator();
                     let gain = audioCtx.createGain();
-                    osc.type = 'sawtooth';
-                    osc.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
-                    osc.connect(gain);
+                    
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
+                    osc2.type = 'square'; // Sub octave to make it punchy
+                    osc2.frequency.value = (440 * Math.pow(2, (notes[step] - 69) / 12)) / 2;
+                    
+                    osc1.connect(gain);
+                    osc2.connect(gain);
                     gain.connect(audioCtx.destination);
                     
-                    gain.gain.setValueAtTime(0.08, audioCtx.currentTime); 
-                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                    gain.gain.setValueAtTime(0.06, time); 
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
                     
-                    osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+                    osc1.start(time); osc1.stop(time + 0.15);
+                    osc2.start(time); osc2.stop(time + 0.15);
+
+                    // 2. Techno Kick Drum (Plays on every 4th step)
+                    if (step % 4 === 0) {
+                        let kickOsc = audioCtx.createOscillator();
+                        let kickGain = audioCtx.createGain();
+                        kickOsc.connect(kickGain);
+                        kickGain.connect(audioCtx.destination);
+                        
+                        kickOsc.frequency.setValueAtTime(150, time);
+                        kickOsc.frequency.exponentialRampToValueAtTime(0.001, time + 0.1);
+                        
+                        kickGain.gain.setValueAtTime(0.15, time);
+                        kickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+                        
+                        kickOsc.start(time); kickOsc.stop(time + 0.1);
+                    }
+
                     step = (step + 1) % notes.length;
                 } catch(e) {}
-            }, 140); 
+            }, 130); // Slightly faster tempo for more adrenaline
         }
 
         function playShootSFX() {
@@ -146,7 +171,14 @@
             } catch(e) {}
         }
 
-        // START TRIGGER
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
+        let lastShotTime = 0, lastHeadRocketTime = 0, bossAlertText = "", bossAlertTimer = 0;
+
+        const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
+        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+        
         function startGame() {
             document.getElementById('startOverlay').style.display = 'none';
             initAudio();
@@ -156,7 +188,6 @@
             animate();
         }
 
-        // CONTROLS
         window.addEventListener('keydown', (e) => {
             if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
             if (e.code === 'ArrowRight') keys.ArrowRight = true;
@@ -171,7 +202,6 @@
             if (e.code === 'Space') keys.Space = false;
         });
 
-        // MECHANICS
         function updateHP() {
             let pct = Math.max(0, (player.hp / player.maxHp) * 100);
             document.getElementById('hpFill').style.width = pct + "%";
@@ -183,6 +213,8 @@
         }
 
         const levelColors = ['#00FF00', '#00FA33', '#00F566', '#00F099', '#00EBCC', '#00D6FF', '#00A3FF', '#0070FF', '#3333FF', '#6600FF', '#9900FF', '#CC00FF', '#FF00FF', '#FF00CC', '#FF0099', '#FF0066', '#FF0033', '#FF0000', '#CC0000', '#8B0000'];
+        let projectiles = [], enemies = [], bossProjectiles = [], particles = [], activeBoss = null, screenShake = 0, stars = [];
+        for (let i = 0; i < 150; i++) stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, radius: Math.random() * 2 + 0.5, speed: Math.random() * 3 + 0.5, alpha: Math.random() });
 
         function createExplosion(x, y, color, amount) {
             for(let i=0; i<amount; i++) particles.push({ x: x, y: y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1.0, color: color, size: Math.random()*5+2 });
@@ -192,7 +224,13 @@
             if (bombs > 0 && !isGameOver) {
                 bombs--; document.getElementById('bombDisplay').innerText = `💥 Bombs: ${bombs}`;
                 let visibleEnemies = enemies.filter(e => e.y > 0);
-                score += visibleEnemies.length * 10; enemies = []; bossProjectiles = [];
+                
+                // TRACK BOMB POINTS WITH PLAY.FUN
+                let pts = visibleEnemies.length * 10;
+                score += pts;
+                if(pts > 0) ogp.addPoints(pts); 
+
+                enemies = []; bossProjectiles = [];
                 if (activeBoss && activeBoss.y > 0) { activeBoss.hp -= 1500; createExplosion(activeBoss.x, activeBoss.y, "orange", 50); }
                 ctx.fillStyle = "white"; ctx.fillRect(0, 0, canvas.width, canvas.height);
                 document.getElementById('scoreDisplay').innerText = "Score: " + score; checkLevelComplete();
@@ -373,7 +411,12 @@
             }
             if (activeBoss && activeBoss.hp <= 0) {
                 createExplosion(activeBoss.x, activeBoss.y, activeBoss.color, 200);
-                score += (activeBoss.levelType === 20) ? 50000 : 2000 * level;
+                
+                // TRACK BOSS POINTS WITH PLAY.FUN
+                let bPts = (activeBoss.levelType === 20) ? 50000 : 2000 * level;
+                score += bPts;
+                ogp.addPoints(bPts);
+
                 document.getElementById('scoreDisplay').innerText = "Score: " + score;
                 activeBoss = null; bossProjectiles = []; checkLevelComplete(); 
             }
@@ -460,13 +503,26 @@
                 projectiles.forEach((p, pIndex) => {
                     if (enemy.y > 0 && p.x > enemy.x - 25 && p.x < enemy.x + 25 && p.y < enemy.y + 25 && p.y + p.height > enemy.y - 25) {
                         createExplosion(enemy.x, enemy.y, "#00ff00", 20); enemies.splice(eIndex, 1); if (level < 10 && p.type === 'laser') projectiles.splice(pIndex, 1); 
-                        score += 10; document.getElementById('scoreDisplay').innerText = "Score: " + score; checkLevelComplete();
+                        
+                        // TRACK NORMAL KILL POINTS WITH PLAY.FUN
+                        score += 10; 
+                        ogp.addPoints(10);
+
+                        document.getElementById('scoreDisplay').innerText = "Score: " + score; checkLevelComplete();
                     }
                 });
             });
         }
 
-        function endGame() { isGameOver = true; document.getElementById('gameOverScreen').style.display = 'block'; document.getElementById('finalScore').innerText = score; if(musicInterval) clearInterval(musicInterval); }
+        function endGame() { 
+            isGameOver = true; 
+            document.getElementById('gameOverScreen').style.display = 'block'; 
+            document.getElementById('finalScore').innerText = score; 
+            if(musicInterval) clearInterval(musicInterval); 
+
+            // END GAME AND SEND FINAL SCORE TO PLAY.FUN
+            ogp.endGame(); 
+        }
         function restartGame() { location.reload(); }
     </script>
 </body>
