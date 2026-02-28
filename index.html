@@ -136,9 +136,10 @@
             } catch(e) { console.log("Audio not supported"); }
         }
 
-        function playRetroMusic() {
+       function playRetroMusic() {
             if (musicInterval) clearInterval(musicInterval);
-            const notes = [36, 36, 39, 36, 43, 41, 36, 34];
+            // Upgraded to a catchy, bouncy classic arcade melody
+            const notes = [45, 45, 48, 45, 52, 45, 50, 48];
             let step = 0;
             
             musicInterval = setInterval(() => {
@@ -146,25 +147,30 @@
                     if(!audioCtx || isGameOver) return;
                     let time = audioCtx.currentTime;
 
+                    // --- 1. THE MELODY (Softer, Plucky Synths) ---
                     let osc1 = audioCtx.createOscillator();
                     let osc2 = audioCtx.createOscillator();
                     let gain = audioCtx.createGain();
                     
-                    osc1.type = 'sawtooth';
+                    // Square wave for the 8-bit pluck, Triangle wave for the warm bass
+                    osc1.type = 'square';
                     osc1.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
-                    osc2.type = 'square'; 
+                    osc2.type = 'triangle'; 
                     osc2.frequency.value = (440 * Math.pow(2, (notes[step] - 69) / 12)) / 2;
                     
                     osc1.connect(gain);
                     osc2.connect(gain);
                     gain.connect(audioCtx.destination);
                     
-                    gain.gain.setValueAtTime(0.06, time); 
-                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+                    // Lower volume and quick fade out so it doesn't hurt the ears
+                    gain.gain.setValueAtTime(0.04, time); 
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
                     
-                    osc1.start(time); osc1.stop(time + 0.15);
-                    osc2.start(time); osc2.stop(time + 0.15);
+                    osc1.start(time); osc1.stop(time + 0.1);
+                    osc2.start(time); osc2.stop(time + 0.1);
 
+                    // --- 2. THE BEAT (Kick Drum + Hi-Hat) ---
+                    // Deep kick drum on the downbeats
                     if (step % 4 === 0) {
                         let kickOsc = audioCtx.createOscillator();
                         let kickGain = audioCtx.createGain();
@@ -174,14 +180,30 @@
                         kickOsc.frequency.setValueAtTime(150, time);
                         kickOsc.frequency.exponentialRampToValueAtTime(0.001, time + 0.1);
                         
-                        kickGain.gain.setValueAtTime(0.15, time);
+                        kickGain.gain.setValueAtTime(0.2, time);
                         kickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
                         
                         kickOsc.start(time); kickOsc.stop(time + 0.1);
                     }
+
+                    // Retro hi-hat "tick" on the off-beats for a catchy groove
+                    if (step % 4 === 2) {
+                        let hatOsc = audioCtx.createOscillator();
+                        let hatGain = audioCtx.createGain();
+                        hatOsc.type = 'square';
+                        hatOsc.connect(hatGain);
+                        hatGain.connect(audioCtx.destination);
+                        
+                        hatOsc.frequency.setValueAtTime(8000, time); 
+                        hatGain.gain.setValueAtTime(0.015, time); 
+                        hatGain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+                        
+                        hatOsc.start(time); hatOsc.stop(time + 0.05);
+                    }
+
                     step = (step + 1) % notes.length;
                 } catch(e) {}
-            }, 130); 
+            }, 140); // Slightly adjusted tempo for a better head-bobbing rhythm
         }
 
         function playShootSFX() {
