@@ -96,18 +96,24 @@
 
     <script>
         // --- 2. CREATE SDK INSTANCE & INITIALIZE ---
-        // This fires instantly so the widget connects perfectly
-        const ogp = new OpenGameSDK();
-        ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
+        let ogp = null;
+        try {
+            if (typeof OpenGameSDK !== 'undefined') {
+                ogp = new OpenGameSDK();
+                ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
+            }
+        } catch (e) {
+            console.log("Play.fun SDK initialization error.");
+        }
 
         // --- GLOBAL POINTS HANDLER ---
-        // This links your visual score to the Play.fun SDK widget in real-time
         let score = 0;
         function recordPoints(pts) {
             score += pts;
             document.getElementById('scoreDisplay').innerText = "Score: " + score;
-            if (pts > 0) {
-                // 3. CALL addPoints() DURING GAMEPLAY
+            
+            // 3. CALL addPoints() DURING GAMEPLAY
+            if (pts > 0 && ogp && typeof ogp.addPoints === 'function') {
                 try {
                     ogp.addPoints(pts);
                 } catch (error) {
@@ -156,7 +162,6 @@
                     osc1.start(time); osc1.stop(time + 0.1);
                     osc2.start(time); osc2.stop(time + 0.1);
 
-                    // Kick Drum
                     if (step % 4 === 0) {
                         let kickOsc = audioCtx.createOscillator();
                         let kickGain = audioCtx.createGain();
@@ -172,7 +177,6 @@
                         kickOsc.start(time); kickOsc.stop(time + 0.1);
                     }
 
-                    // Hi-Hat
                     if (step % 4 === 2) {
                         let hatOsc = audioCtx.createOscillator();
                         let hatGain = audioCtx.createGain();
@@ -192,6 +196,7 @@
             }, 140); 
         }
 
+        // FIXED: The browser crash bug was here! Safely reuses the existing audioCtx.
         function playShootSFX() {
             try {
                 if(!audioCtx) return;
@@ -243,11 +248,11 @@
             spawnWave();
             updateHP();
             
-            // IDLE COIN MINER - Matches the functionality of Capybara Simulator
+            // IDLE COIN MINER - Safely pumps 5 points every 1 second into the Play.fun Widget
             if (survivalPointTimer) clearInterval(survivalPointTimer);
             survivalPointTimer = setInterval(() => {
                 if (!isGameOver) {
-                    recordPoints(5); // Gives 5 points to player every 1 second they stay alive
+                    recordPoints(5); 
                 }
             }, 1000); 
             
@@ -474,10 +479,7 @@
             }
             if (activeBoss && activeBoss.hp <= 0) {
                 createExplosion(activeBoss.x, activeBoss.y, activeBoss.color, 200);
-                
-                let bPts = (activeBoss.levelType === 20) ? 50000 : 2000 * level;
-                recordPoints(bPts);
-
+                recordPoints((activeBoss.levelType === 20) ? 50000 : 2000 * level);
                 activeBoss = null; bossProjectiles = []; checkLevelComplete(); 
             }
         }
