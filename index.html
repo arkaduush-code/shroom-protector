@@ -95,54 +95,106 @@
     </div>
 
     <script>
-        // --- PLAY.FUN SDK INITIALIZATION ---
-        // Initializes instantly so the widget hooks up perfectly
-        const ogp = new OpenGameSDK();
-        ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
+        // --- SAFE PLAY.FUN SDK INITIALIZATION ---
+        // This try/catch ensures that if the SDK fails or the Game ID is bugged,
+        // it will NOT crash the visual game graphics. 
+        let ogp = null;
+        window.addEventListener('load', () => {
+            try {
+                if (typeof OpenGameSDK !== 'undefined') {
+                    ogp = new OpenGameSDK();
+                    ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
+                }
+            } catch(e) {
+                console.log("Play.fun SDK loading bypassed. Game running in local mode.");
+            }
+        });
 
-        // Safe function to add points without breaking the game loop
+        // Safe function to add points without crashing
         function sendPointsSafely(points) {
-            try { ogp.addPoints(points); } catch(e) { console.log("Points syncing..."); }
+            if (ogp && typeof ogp.addPoints === 'function') {
+                try { ogp.addPoints(points); } catch(e) {}
+            }
         }
+
+        // Safe function to end game on SDK
+        function sendGameOverSafely() {
+            if (ogp && typeof ogp.endGame === 'function') {
+                try { ogp.endGame(); } catch(e) {}
+            }
+        }
+
 
         // --- UPGRADED AUDIO ENGINE ---
-        // Uses your raw MP3 track for the main beat
-        const bgMusic = new Audio('track1.mp3');
-        bgMusic.loop = true;
-        bgMusic.volume = 0.5;
+        let audioCtx;
+        let musicInterval;
 
-        function playRealMusic() {
-            bgMusic.play().catch(e => {
-                console.log("Audio failed to start. Ensure track1.mp3 is uploaded to GitHub.");
-            });
+        function initAudio() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch(e) { console.log("Audio not supported"); }
         }
 
-        // Better, richer retro sound effects that don't sound cheap
+        function playRetroMusic() {
+            if (musicInterval) clearInterval(musicInterval);
+            const notes = [36, 36, 39, 36, 43, 41, 36, 34];
+            let step = 0;
+            
+            musicInterval = setInterval(() => {
+                try {
+                    if(!audioCtx || isGameOver) return;
+                    let time = audioCtx.currentTime;
+
+                    let osc1 = audioCtx.createOscillator();
+                    let osc2 = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    
+                    osc1.type = 'sawtooth';
+                    osc1.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
+                    osc2.type = 'square'; 
+                    osc2.frequency.value = (440 * Math.pow(2, (notes[step] - 69) / 12)) / 2;
+                    
+                    osc1.connect(gain);
+                    osc2.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    
+                    gain.gain.setValueAtTime(0.06, time); 
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
+                    
+                    osc1.start(time); osc1.stop(time + 0.15);
+                    osc2.start(time); osc2.stop(time + 0.15);
+
+                    if (step % 4 === 0) {
+                        let kickOsc = audioCtx.createOscillator();
+                        let kickGain = audioCtx.createGain();
+                        kickOsc.connect(kickGain);
+                        kickGain.connect(audioCtx.destination);
+                        
+                        kickOsc.frequency.setValueAtTime(150, time);
+                        kickOsc.frequency.exponentialRampToValueAtTime(0.001, time + 0.1);
+                        
+                        kickGain.gain.setValueAtTime(0.15, time);
+                        kickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+                        
+                        kickOsc.start(time); kickOsc.stop(time + 0.1);
+                    }
+                    step = (step + 1) % notes.length;
+                } catch(e) {}
+            }, 130); 
+        }
+
         function playShootSFX() {
             try {
-                let ctx = new (window.AudioContext || window.webkitAudioContext)();
-                let o = ctx.createOscillator(), g = ctx.createGain();
-                o.type = 'sawtooth'; // Richer laser sound
-                o.frequency.setValueAtTime(880, ctx.currentTime);
-                o.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.15); // Classic 'pew' drop
-                o.connect(g); g.connect(ctx.destination);
-                g.gain.setValueAtTime(0.08, ctx.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-                o.start(); o.stop(ctx.currentTime + 0.15);
-            } catch(e) {}
-        }
-
-        function playExplosionSFX() {
-            try {
-                let ctx = new (window.AudioContext || window.webkitAudioContext)();
-                let o = ctx.createOscillator(), g = ctx.createGain();
-                o.type = 'square'; // Deep crunch
-                o.frequency.setValueAtTime(100, ctx.currentTime);
-                o.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-                o.connect(g); g.connect(ctx.destination);
-                g.gain.setValueAtTime(0.15, ctx.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-                o.start(); o.stop(ctx.currentTime + 0.2);
+                if(!audioCtx) return;
+                let o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'square';
+                o.frequency.setValueAtTime(600, audioCtx.currentTime);
+                o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+                o.connect(g); g.connect(audioCtx.destination);
+                g.gain.setValueAtTime(0.03, audioCtx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+                o.start(); o.stop(audioCtx.currentTime + 0.1);
             } catch(e) {}
         }
 
@@ -152,8 +204,6 @@
         const ctx = canvas.getContext('2d');
         let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
         let lastShotTime = 0, lastHeadRocketTime = 0, bossAlertText = "", bossAlertTimer = 0;
-        
-        let survivalPointTimer; 
 
         const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
         const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
@@ -165,21 +215,10 @@
 
         function startGame() {
             document.getElementById('startOverlay').style.display = 'none';
-            playRealMusic();
+            initAudio();
+            playRetroMusic();
             spawnWave();
             updateHP();
-            
-            // --- OPTIMIZED CONSTANT COIN GENERATOR ---
-            // Ticks every 5 seconds to prevent rate-limiting the Play.fun API
-            if (survivalPointTimer) clearInterval(survivalPointTimer);
-            survivalPointTimer = setInterval(() => {
-                if (!isGameOver) {
-                    score += 25; 
-                    sendPointsSafely(25); 
-                    document.getElementById('scoreDisplay').innerText = "Score: " + score;
-                }
-            }, 5000); // 5000ms = 5 seconds
-            
             animate();
         }
 
@@ -211,7 +250,6 @@
         const levelColors = ['#00FF00', '#00FA33', '#00F566', '#00F099', '#00EBCC', '#00D6FF', '#00A3FF', '#0070FF', '#3333FF', '#6600FF', '#9900FF', '#CC00FF', '#FF00FF', '#FF00CC', '#FF0099', '#FF0066', '#FF0033', '#FF0000', '#CC0000', '#8B0000'];
 
         function createExplosion(x, y, color, amount) {
-            playExplosionSFX();
             for(let i=0; i<amount; i++) particles.push({ x: x, y: y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1.0, color: color, size: Math.random()*5+2 });
         }
 
@@ -222,7 +260,7 @@
                 
                 let pts = visibleEnemies.length * 10;
                 score += pts;
-                if (pts > 0) { sendPointsSafely(pts); }
+                if(pts > 0) sendPointsSafely(pts); 
 
                 enemies = []; bossProjectiles = [];
                 if (activeBoss && activeBoss.y > 0) { activeBoss.hp -= 1500; createExplosion(activeBoss.x, activeBoss.y, "orange", 50); }
@@ -512,12 +550,10 @@
 
         function endGame() { 
             isGameOver = true; 
-            if (survivalPointTimer) clearInterval(survivalPointTimer); 
-            document.getElementById('gameOverScreen').style.display = 'flex'; 
+            document.getElementById('gameOverScreen').style.display = 'block'; 
             document.getElementById('finalScore').innerText = score; 
-            
-            // This safely finalizes all points with the SDK!
-            try { ogp.endGame(); } catch(e) {} 
+            if(musicInterval) clearInterval(musicInterval); 
+            sendGameOverSafely(); 
         }
         
         function restartGame() { location.reload(); }
