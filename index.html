@@ -12,7 +12,7 @@
         }
         
         .header-container { display: flex; justify-content: center; align-items: center; gap: 15px; margin-top: 10px; margin-bottom: 5px; }
-        .header-logo { font-size: 25px; text-shadow: 0px 0px 20px #00ffcc; filter: drop-shadow(0px 0px 10px rgba(0, 255, 204, 0.8)); }
+        .header-logo { font-size: 25px; text-shadow: 0px 0px 20px #00ffcc; }
         h2 { margin: 0; color: #00ffcc; letter-spacing: 3px; text-shadow: 0px 0px 10px #00ffcc; font-size: 22px;}
         
         #gameHUD { 
@@ -39,8 +39,8 @@
         #startOverlay, #gameOverScreen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
         #gameOverScreen { display: none; border: 4px solid #ff0000; box-shadow: inset 0px 0px 50px #ff0000; }
         
-        .btn-start { background: #00ffcc; color: #000; border: none; padding: 20px 50px; font-size: 30px; font-weight: bold; cursor: pointer; border-radius: 10px; box-shadow: 0 0 20px #00ffcc; transition: 0.3s; }
-        .btn-start:hover { transform: scale(1.1); background: #fff; }
+        .btn-start { background: #00ffcc; color: #000; border: none; padding: 20px 50px; font-size: 30px; font-weight: bold; cursor: pointer; border-radius: 10px; box-shadow: 0 0 20px #00ffcc; transition: 0.2s; }
+        .btn-start:hover { transform: scale(1.05); box-shadow: 0 0 40px #00ffcc; background: #33ffdd; }
 
         #modeDisplay { background-color: #00ffcc; color: black; padding: 3px 15px; font-size: 14px; border-radius: 5px; font-weight: bold; box-shadow: 0px 0px 10px #00ffcc; min-width: 120px; }
         #modeDisplay.manual { background-color: #ff00ff; box-shadow: 0px 0px 10px #ff00ff; color: white; }
@@ -66,8 +66,7 @@
 
     <div class="game-wrapper">
         <div id="startOverlay">
-            <h1 style="color:#00ffcc; font-size: 45px; margin-bottom: 20px;">SYSTEM ONLINE</h1>
-            <p style="color:white; margin-bottom: 30px;">Built-in Synthesis Engine Loaded</p>
+            <h1 style="color:#00ffcc; font-size: 45px; margin-bottom: 20px;">SYSTEM READY</h1>
             <button class="btn-start" onclick="startGame()">START DEFENSE</button>
         </div>
         
@@ -89,13 +88,24 @@
     </div>
 
     <script>
-        // --- NATIVE SYNTH ENGINE ---
-        let audioCtx;
-        let musicInterval;
+        // CORE VARIABLES
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
+        let lastShotTime = 0, lastHeadRocketTime = 0, bossAlertText = "", bossAlertTimer = 0;
+        const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
+        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+        let projectiles = [], enemies = [], bossProjectiles = [], particles = [], activeBoss = null, screenShake = 0, stars = [];
+        
+        for (let i = 0; i < 150; i++) stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, radius: Math.random() * 2 + 0.5, speed: Math.random() * 3 + 0.5, alpha: Math.random() });
 
+        // AUDIO ENGINE WITH SAFETY SHIELD
+        let audioCtx, musicInterval;
         function initAudio() {
-            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            if (audioCtx.state === 'suspended') audioCtx.resume();
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch(e) { console.log("Audio not supported by browser."); }
         }
 
         function playRetroMusic() {
@@ -104,42 +114,39 @@
             let step = 0;
             
             musicInterval = setInterval(() => {
-                if(!audioCtx || isGameOver) return;
-                let osc = audioCtx.createOscillator();
-                let gain = audioCtx.createGain();
-                osc.type = 'sawtooth';
-                osc.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                
-                gain.gain.setValueAtTime(0.08, audioCtx.currentTime); 
-                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
-                
-                osc.start(); osc.stop(audioCtx.currentTime + 0.15);
-                step = (step + 1) % notes.length;
+                try {
+                    if(!audioCtx || isGameOver) return;
+                    let osc = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    osc.type = 'sawtooth';
+                    osc.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    
+                    gain.gain.setValueAtTime(0.08, audioCtx.currentTime); 
+                    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                    
+                    osc.start(); osc.stop(audioCtx.currentTime + 0.15);
+                    step = (step + 1) % notes.length;
+                } catch(e) {}
             }, 140); 
         }
 
         function playShootSFX() {
-            if(!audioCtx) return;
-            let o = audioCtx.createOscillator(), g = audioCtx.createGain();
-            o.type = 'square';
-            o.frequency.setValueAtTime(600, audioCtx.currentTime);
-            o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-            o.connect(g); g.connect(audioCtx.destination);
-            g.gain.setValueAtTime(0.03, audioCtx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-            o.start(); o.stop(audioCtx.currentTime + 0.1);
+            try {
+                if(!audioCtx) return;
+                let o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                o.type = 'square';
+                o.frequency.setValueAtTime(600, audioCtx.currentTime);
+                o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+                o.connect(g); g.connect(audioCtx.destination);
+                g.gain.setValueAtTime(0.03, audioCtx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+                o.start(); o.stop(audioCtx.currentTime + 0.1);
+            } catch(e) {}
         }
 
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
-        let lastShotTime = 0, lastHeadRocketTime = 0, bossAlertText = "", bossAlertTimer = 0;
-
-        const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
-        const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
-        
+        // START TRIGGER
         function startGame() {
             document.getElementById('startOverlay').style.display = 'none';
             initAudio();
@@ -149,6 +156,7 @@
             animate();
         }
 
+        // CONTROLS
         window.addEventListener('keydown', (e) => {
             if (e.code === 'ArrowLeft') keys.ArrowLeft = true;
             if (e.code === 'ArrowRight') keys.ArrowRight = true;
@@ -163,6 +171,7 @@
             if (e.code === 'Space') keys.Space = false;
         });
 
+        // MECHANICS
         function updateHP() {
             let pct = Math.max(0, (player.hp / player.maxHp) * 100);
             document.getElementById('hpFill').style.width = pct + "%";
@@ -174,8 +183,6 @@
         }
 
         const levelColors = ['#00FF00', '#00FA33', '#00F566', '#00F099', '#00EBCC', '#00D6FF', '#00A3FF', '#0070FF', '#3333FF', '#6600FF', '#9900FF', '#CC00FF', '#FF00FF', '#FF00CC', '#FF0099', '#FF0066', '#FF0033', '#FF0000', '#CC0000', '#8B0000'];
-        let projectiles = [], enemies = [], bossProjectiles = [], particles = [], activeBoss = null, screenShake = 0, stars = [];
-        for (let i = 0; i < 150; i++) stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, radius: Math.random() * 2 + 0.5, speed: Math.random() * 3 + 0.5, alpha: Math.random() });
 
         function createExplosion(x, y, color, amount) {
             for(let i=0; i<amount; i++) particles.push({ x: x, y: y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1.0, color: color, size: Math.random()*5+2 });
@@ -309,7 +316,6 @@
 
             if (player.invulnTimer > 0) { player.invulnTimer--; if (player.invulnTimer % 10 < 5) return; }
 
-            // Level 5+ Cannons
             if (level >= 5) {
                 ctx.fillStyle = "#555"; ctx.strokeStyle = "#ccc"; ctx.lineWidth = 2;
                 ctx.fillRect(pX - 12, pY - size - 25, 24, 30); 
@@ -317,23 +323,19 @@
                 ctx.fillStyle = "red"; ctx.beginPath(); ctx.arc(pX, pY - size - 25, 8, Math.PI, 0); ctx.fill();
             }
 
-            // Stalk
             ctx.fillStyle = '#cccccc'; ctx.strokeStyle = '#555555'; ctx.lineWidth = 3;
             ctx.beginPath(); ctx.moveTo(pX - size/3, pY + size * 1.5); ctx.quadraticCurveTo(pX - size/4, pY, pX - size/6, pY - size/2); 
             ctx.lineTo(pX + size/6, pY - size/2); ctx.quadraticCurveTo(pX + size/4, pY, pX + size/3, pY + size * 1.5); ctx.closePath(); ctx.fill(); ctx.stroke();
 
-            // Cap
             ctx.fillStyle = baseColor; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(pX - size * 1.4, pY + size/4); ctx.bezierCurveTo(pX - size * 1.4, pY - size * 1.5, pX + size * 1.4, pY - size * 1.5, pX + size * 1.4, pY + size/4); 
             ctx.bezierCurveTo(pX + size, pY + size/2, pX - size, pY + size/2, pX - size * 1.4, pY + size/4); ctx.closePath(); ctx.fill(); ctx.stroke();
 
-            // Spots
             ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
             ctx.beginPath(); ctx.ellipse(pX - size/2, pY - size/1.5, size/5, size/8, Math.PI/4, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.ellipse(pX + size/2, pY - size/2, size/4, size/6, -Math.PI/6, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.ellipse(pX, pY - size, size/3, size/5, 0, 0, Math.PI*2); ctx.fill();
 
-            // Angry Eyes
             let eyeTilt = level * 1.2; 
             ctx.fillStyle = "white";
             ctx.beginPath(); ctx.moveTo(pX - size/2, pY - size/5); ctx.lineTo(pX - size/6, pY + eyeTilt - size/6); ctx.lineTo(pX - size/2, pY + eyeTilt + 5); ctx.fill();
@@ -345,7 +347,6 @@
             ctx.beginPath(); ctx.moveTo(pX - (size/1.2), pY - (size/3)); ctx.lineTo(pX - 2, pY + eyeTilt - (size/6)); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(pX + (size/1.2), pY - (size/3)); ctx.lineTo(pX + 2, pY + eyeTilt - (size/6)); ctx.stroke();
 
-            // Mouth
             ctx.fillStyle = "black"; ctx.beginPath();
             let mTop = pY + size/1.5, mBot = pY + size - 5 + (level*1.5); 
             ctx.moveTo(pX - size/2, mTop); ctx.lineTo(pX - size/4, mBot); ctx.lineTo(pX, mTop + 5);
