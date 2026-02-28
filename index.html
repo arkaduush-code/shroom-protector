@@ -1,6 +1,7 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
     <title>The Shroom Protector</title>
     <meta name="x-ogp-key" content="657c89e6-1d39-472f-aa21-b6ef8dc732ff" id="ogp-key-meta" />
     
@@ -32,7 +33,9 @@
             margin: 0 auto; border: 3px solid #00ffcc; border-radius: 10px; 
             box-shadow: 0px 0px 60px rgba(0, 255, 204, 0.4); overflow: hidden; background-color: #050508; 
         }
+        
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
+        
         .scanlines { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)); background-size: 100% 4px, 3px 100%; pointer-events: none; z-index: 10; }
         
         .command-guide { max-width: 1000px; width: 95%; margin: 10px auto; padding: 10px; border: 1px solid #00ffcc; background: rgba(0, 255, 204, 0.1); border-radius: 5px; color: #fff; font-size: 14px; display: flex; justify-content: space-around; text-shadow: 0px 0px 5px #00ffcc;}
@@ -42,10 +45,11 @@
         #gameOverScreen { display: none; border: 4px solid #ff0000; box-shadow: inset 0px 0px 50px #ff0000; }
         
         .btn-start { background: #00ffcc; color: #000; border: none; padding: 20px 50px; font-size: 30px; font-weight: bold; cursor: pointer; border-radius: 10px; box-shadow: 0 0 20px #00ffcc; transition: 0.3s; }
-        .btn-start:hover { transform: scale(1.1); background: #fff; }
+        .btn-start:hover { transform: scale(1.1); background: #fff; box-shadow: 0 0 40px #fff; }
 
         #modeDisplay { background-color: #00ffcc; color: black; padding: 3px 15px; font-size: 14px; border-radius: 5px; font-weight: bold; box-shadow: 0px 0px 10px #00ffcc; min-width: 120px; }
         #modeDisplay.manual { background-color: #ff00ff; box-shadow: 0px 0px 10px #ff00ff; color: white; }
+        
         .reboot-btn { background-color: #ff0000; color: white; border: none; padding: 15px 30px; font-size: 20px; cursor: pointer; border-radius: 5px; font-weight: bold; margin-top: 15px; }
         .reboot-btn:hover { background-color: #cc0000; }
     </style>
@@ -68,8 +72,8 @@
 
     <div class="game-wrapper">
         <div id="startOverlay">
-            <h1 style="color:#00ffcc; font-size: 45px; margin-bottom: 20px;">SYSTEM ONLINE</h1>
-            <p style="color:white; margin-bottom: 30px;">Upgraded Audio Engine Loaded</p>
+            <h1 style="color:#00ffcc; font-size: 45px; margin-bottom: 20px; text-shadow: 0 0 20px #00ffcc;">SYSTEM READY</h1>
+            <p style="color:white; margin-bottom: 30px;">Awaiting Deployment...</p>
             <button class="btn-start" onclick="startGame()">START DEFENSE</button>
         </div>
         
@@ -91,11 +95,37 @@
     </div>
 
     <script>
-        // --- INITIALIZE PLAY.FUN SDK ---
-        const ogp = new OpenGameSDK();
-        ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
+        // --- SAFE PLAY.FUN SDK INITIALIZATION ---
+        // This try/catch ensures that if the SDK fails or the Game ID is bugged,
+        // it will NOT crash the visual game graphics. 
+        let ogp = null;
+        window.addEventListener('load', () => {
+            try {
+                if (typeof OpenGameSDK !== 'undefined') {
+                    ogp = new OpenGameSDK();
+                    ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
+                }
+            } catch(e) {
+                console.log("Play.fun SDK loading bypassed. Game running in local mode.");
+            }
+        });
 
-        // --- UPGRADED NATIVE SYNTH ENGINE ---
+        // Safe function to add points without crashing
+        function sendPointsSafely(points) {
+            if (ogp && typeof ogp.addPoints === 'function') {
+                try { ogp.addPoints(points); } catch(e) {}
+            }
+        }
+
+        // Safe function to end game on SDK
+        function sendGameOverSafely() {
+            if (ogp && typeof ogp.endGame === 'function') {
+                try { ogp.endGame(); } catch(e) {}
+            }
+        }
+
+
+        // --- UPGRADED AUDIO ENGINE ---
         let audioCtx;
         let musicInterval;
 
@@ -116,14 +146,13 @@
                     if(!audioCtx || isGameOver) return;
                     let time = audioCtx.currentTime;
 
-                    // 1. Synth Bassline (Fat Dual Oscillator)
                     let osc1 = audioCtx.createOscillator();
                     let osc2 = audioCtx.createOscillator();
                     let gain = audioCtx.createGain();
                     
                     osc1.type = 'sawtooth';
                     osc1.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
-                    osc2.type = 'square'; // Sub octave to make it punchy
+                    osc2.type = 'square'; 
                     osc2.frequency.value = (440 * Math.pow(2, (notes[step] - 69) / 12)) / 2;
                     
                     osc1.connect(gain);
@@ -136,7 +165,6 @@
                     osc1.start(time); osc1.stop(time + 0.15);
                     osc2.start(time); osc2.stop(time + 0.15);
 
-                    // 2. Techno Kick Drum (Plays on every 4th step)
                     if (step % 4 === 0) {
                         let kickOsc = audioCtx.createOscillator();
                         let kickGain = audioCtx.createGain();
@@ -151,10 +179,9 @@
                         
                         kickOsc.start(time); kickOsc.stop(time + 0.1);
                     }
-
                     step = (step + 1) % notes.length;
                 } catch(e) {}
-            }, 130); // Slightly faster tempo for more adrenaline
+            }, 130); 
         }
 
         function playShootSFX() {
@@ -171,6 +198,8 @@
             } catch(e) {}
         }
 
+
+        // --- CORE GAME ENGINE ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
@@ -178,7 +207,12 @@
 
         const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
         const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
+        let projectiles = [], enemies = [], bossProjectiles = [], particles = [], activeBoss = null, screenShake = 0, stars = [];
         
+        for (let i = 0; i < 150; i++) {
+            stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, radius: Math.random() * 2 + 0.5, speed: Math.random() * 3 + 0.5, alpha: Math.random() });
+        }
+
         function startGame() {
             document.getElementById('startOverlay').style.display = 'none';
             initAudio();
@@ -196,6 +230,7 @@
             if (e.code === 'KeyM' || e.key === 'm') { isAutoMode = false; document.getElementById('modeDisplay').innerText = "🕹️ MANUAL"; document.getElementById('modeDisplay').classList.add('manual'); }
             if (e.code === 'KeyA' || e.key === 'a') { isAutoMode = true; document.getElementById('modeDisplay').innerText = "🤖 AUTO"; document.getElementById('modeDisplay').classList.remove('manual'); }
         });
+        
         window.addEventListener('keyup', (e) => {
             if (e.code === 'ArrowLeft') keys.ArrowLeft = false;
             if (e.code === 'ArrowRight') keys.ArrowRight = false;
@@ -213,8 +248,6 @@
         }
 
         const levelColors = ['#00FF00', '#00FA33', '#00F566', '#00F099', '#00EBCC', '#00D6FF', '#00A3FF', '#0070FF', '#3333FF', '#6600FF', '#9900FF', '#CC00FF', '#FF00FF', '#FF00CC', '#FF0099', '#FF0066', '#FF0033', '#FF0000', '#CC0000', '#8B0000'];
-        let projectiles = [], enemies = [], bossProjectiles = [], particles = [], activeBoss = null, screenShake = 0, stars = [];
-        for (let i = 0; i < 150; i++) stars.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, radius: Math.random() * 2 + 0.5, speed: Math.random() * 3 + 0.5, alpha: Math.random() });
 
         function createExplosion(x, y, color, amount) {
             for(let i=0; i<amount; i++) particles.push({ x: x, y: y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1.0, color: color, size: Math.random()*5+2 });
@@ -225,10 +258,9 @@
                 bombs--; document.getElementById('bombDisplay').innerText = `💥 Bombs: ${bombs}`;
                 let visibleEnemies = enemies.filter(e => e.y > 0);
                 
-                // TRACK BOMB POINTS WITH PLAY.FUN
                 let pts = visibleEnemies.length * 10;
                 score += pts;
-                if(pts > 0) ogp.addPoints(pts); 
+                if(pts > 0) sendPointsSafely(pts); 
 
                 enemies = []; bossProjectiles = [];
                 if (activeBoss && activeBoss.y > 0) { activeBoss.hp -= 1500; createExplosion(activeBoss.x, activeBoss.y, "orange", 50); }
@@ -412,10 +444,9 @@
             if (activeBoss && activeBoss.hp <= 0) {
                 createExplosion(activeBoss.x, activeBoss.y, activeBoss.color, 200);
                 
-                // TRACK BOSS POINTS WITH PLAY.FUN
                 let bPts = (activeBoss.levelType === 20) ? 50000 : 2000 * level;
                 score += bPts;
-                ogp.addPoints(bPts);
+                sendPointsSafely(bPts);
 
                 document.getElementById('scoreDisplay').innerText = "Score: " + score;
                 activeBoss = null; bossProjectiles = []; checkLevelComplete(); 
@@ -427,7 +458,12 @@
             animationId = requestAnimationFrame(animate);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            stars.forEach(s => { s.y += s.speed; if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; } ctx.fillStyle = `rgba(200, 255, 255, ${s.alpha})`; ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2); ctx.fill(); });
+            stars.forEach(s => { 
+                s.y += s.speed; 
+                if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; } 
+                ctx.fillStyle = `rgba(200, 255, 255, ${s.alpha})`; 
+                ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2); ctx.fill(); 
+            });
 
             for(let i = particles.length - 1; i >= 0; i--) {
                 let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.03;
@@ -504,10 +540,8 @@
                     if (enemy.y > 0 && p.x > enemy.x - 25 && p.x < enemy.x + 25 && p.y < enemy.y + 25 && p.y + p.height > enemy.y - 25) {
                         createExplosion(enemy.x, enemy.y, "#00ff00", 20); enemies.splice(eIndex, 1); if (level < 10 && p.type === 'laser') projectiles.splice(pIndex, 1); 
                         
-                        // TRACK NORMAL KILL POINTS WITH PLAY.FUN
                         score += 10; 
-                        ogp.addPoints(10);
-
+                        sendPointsSafely(10);
                         document.getElementById('scoreDisplay').innerText = "Score: " + score; checkLevelComplete();
                     }
                 });
@@ -519,10 +553,9 @@
             document.getElementById('gameOverScreen').style.display = 'block'; 
             document.getElementById('finalScore').innerText = score; 
             if(musicInterval) clearInterval(musicInterval); 
-
-            // END GAME AND SEND FINAL SCORE TO PLAY.FUN
-            ogp.endGame(); 
+            sendGameOverSafely(); 
         }
+        
         function restartGame() { location.reload(); }
     </script>
 </body>
