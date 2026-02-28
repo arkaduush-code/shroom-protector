@@ -52,9 +52,6 @@
         
         .reboot-btn { background-color: #ff0000; color: white; border: none; padding: 15px 30px; font-size: 20px; cursor: pointer; border-radius: 5px; font-weight: bold; margin-top: 15px; }
         .reboot-btn:hover { background-color: #cc0000; }
-        
-        .claim-btn { background-color: #ffcc00; color: black; border: none; padding: 15px 30px; font-size: 20px; cursor: pointer; border-radius: 5px; font-weight: bold; margin-top: 15px; box-shadow: 0 0 15px #ffcc00; transition: 0.2s;}
-        .claim-btn:hover { background-color: #fff; transform: scale(1.05); }
     </style>
 </head>
 <body>
@@ -87,7 +84,6 @@
             <h1 id="endTitle" style="color: red; font-size: 45px; margin-top: 0; text-shadow: 0px 0px 20px red;">HULL DESTROYED</h1>
             <p style="color: white; font-size: 24px;">Final Score: <span id="finalScore">0</span></p>
             <button class="reboot-btn" onclick="restartGame()">REBOOT PROTECTOR</button>
-            <button class="claim-btn" onclick="claimMyRewards()">💰 CLAIM REWARDS</button>
         </div>
     </div>
 
@@ -99,50 +95,26 @@
     </div>
 
     <script>
-        // --- SAFE PLAY.FUN SDK INITIALIZATION ---
+        // --- PLAY.FUN SDK INITIALIZATION ---
+        // We initialize the Frontend SDK immediately so it connects to the widget.
         let ogp = null;
-        window.addEventListener('load', () => {
-            try {
-                if (typeof OpenGameSDK !== 'undefined') {
-                    ogp = new OpenGameSDK();
-                    ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
-                }
-            } catch(e) {
-                console.log("Play.fun SDK loading bypassed. Game running in local mode.");
+        try {
+            if (typeof OpenGameSDK !== 'undefined') {
+                ogp = new OpenGameSDK();
+                ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
             }
-        });
+        } catch (e) {
+            console.log("Play.fun SDK initialization error.");
+        }
 
-        // Safe function to add points
+        // Wrapper to safely push points to the Play.fun widget
         function sendPointsSafely(points) {
             if (ogp && typeof ogp.addPoints === 'function') {
                 try { ogp.addPoints(points); } catch(e) {}
             }
         }
 
-        // Safe function to end game on SDK
-        function sendGameOverSafely() {
-            if (ogp && typeof ogp.endGame === 'function') {
-                try { ogp.endGame(); } catch(e) {}
-            }
-        }
-
-        // --- NEW: REWARDS API INTEGRATION ---
-        async function claimMyRewards() {
-            if (!ogp) {
-                alert("Please play on the official play.fun platform to claim your tokens!");
-                return;
-            }
-            try {
-                const rewards = await ogp.listUserRewards();
-                console.log('Available Rewards:', rewards);
-                alert("Reward Request Sent! ✅\n\nCheck the Play.fun dashboard below your game screen to finalize and claim your tokens directly to your wallet.");
-            } catch (e) {
-                console.log("Reward claim error:", e);
-                alert("Make sure your wallet is connected to Play.fun to claim your rewards!");
-            }
-        }
-
-        // --- CUSTOM AUDIO TRACK ENGINE ---
+        // --- MP3 AUDIO ENGINE ---
         const bgMusic = new Audio('track1.mp3');
         bgMusic.loop = true;
         bgMusic.volume = 0.5;
@@ -157,10 +129,27 @@
             try {
                 let ctx = new (window.AudioContext || window.webkitAudioContext)();
                 let o = ctx.createOscillator(), g = ctx.createGain();
-                o.type = 'square'; o.frequency.setValueAtTime(800, ctx.currentTime);
+                o.type = 'sawtooth';
+                o.frequency.setValueAtTime(880, ctx.currentTime);
+                o.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.15); 
                 o.connect(g); g.connect(ctx.destination);
-                g.gain.setValueAtTime(0.02, ctx.currentTime);
-                o.start(); o.stop(ctx.currentTime + 0.05);
+                g.gain.setValueAtTime(0.08, ctx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+                o.start(); o.stop(ctx.currentTime + 0.15);
+            } catch(e) {}
+        }
+
+        function playExplosionSFX() {
+            try {
+                let ctx = new (window.AudioContext || window.webkitAudioContext)();
+                let o = ctx.createOscillator(), g = ctx.createGain();
+                o.type = 'square'; 
+                o.frequency.setValueAtTime(100, ctx.currentTime);
+                o.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+                o.connect(g); g.connect(ctx.destination);
+                g.gain.setValueAtTime(0.15, ctx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+                o.start(); o.stop(ctx.currentTime + 0.2);
             } catch(e) {}
         }
 
@@ -171,7 +160,7 @@
         let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
         let lastShotTime = 0, lastHeadRocketTime = 0, bossAlertText = "", bossAlertTimer = 0;
         
-        let survivalPointTimer; // <-- NEW: Timer for constant points
+        let survivalPointTimer; 
 
         const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
         const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
@@ -187,16 +176,16 @@
             spawnWave();
             updateHP();
             
-            // --- CONSTANT COIN GENERATOR ---
-            // Gives the player points continuously just for surviving
+            // CONSTANT COIN GENERATOR
+            // Safely batches points to prevent rate-limiting the API (25 points every 5 seconds)
             if (survivalPointTimer) clearInterval(survivalPointTimer);
             survivalPointTimer = setInterval(() => {
                 if (!isGameOver) {
-                    score += 5; // Adds 5 points every second
-                    sendPointsSafely(5); // Sends it directly to Play.fun widget
+                    score += 25; 
+                    sendPointsSafely(25); 
                     document.getElementById('scoreDisplay').innerText = "Score: " + score;
                 }
-            }, 1000);
+            }, 5000); 
             
             animate();
         }
@@ -229,6 +218,7 @@
         const levelColors = ['#00FF00', '#00FA33', '#00F566', '#00F099', '#00EBCC', '#00D6FF', '#00A3FF', '#0070FF', '#3333FF', '#6600FF', '#9900FF', '#CC00FF', '#FF00FF', '#FF00CC', '#FF0099', '#FF0066', '#FF0033', '#FF0000', '#CC0000', '#8B0000'];
 
         function createExplosion(x, y, color, amount) {
+            playExplosionSFX();
             for(let i=0; i<amount; i++) particles.push({ x: x, y: y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1.0, color: color, size: Math.random()*5+2 });
         }
 
@@ -239,7 +229,7 @@
                 
                 let pts = visibleEnemies.length * 10;
                 score += pts;
-                if(pts > 0) sendPointsSafely(pts); 
+                if (pts > 0) { sendPointsSafely(pts); }
 
                 enemies = []; bossProjectiles = [];
                 if (activeBoss && activeBoss.y > 0) { activeBoss.hp -= 1500; createExplosion(activeBoss.x, activeBoss.y, "orange", 50); }
@@ -529,10 +519,14 @@
 
         function endGame() { 
             isGameOver = true; 
-            if (survivalPointTimer) clearInterval(survivalPointTimer); // Stops the passive points
+            if (survivalPointTimer) clearInterval(survivalPointTimer); 
             document.getElementById('gameOverScreen').style.display = 'flex'; 
             document.getElementById('finalScore').innerText = score; 
-            sendGameOverSafely(); 
+            
+            // This safely finalizes all points with the SDK!
+            if (ogp && typeof ogp.endGame === 'function') {
+                try { ogp.endGame(); } catch(e) {}
+            }
         }
         
         function restartGame() { location.reload(); }
