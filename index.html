@@ -52,6 +52,9 @@
         
         .reboot-btn { background-color: #ff0000; color: white; border: none; padding: 15px 30px; font-size: 20px; cursor: pointer; border-radius: 5px; font-weight: bold; margin-top: 15px; }
         .reboot-btn:hover { background-color: #cc0000; }
+        
+        .claim-btn { background-color: #ffcc00; color: black; border: none; padding: 15px 30px; font-size: 20px; cursor: pointer; border-radius: 5px; font-weight: bold; margin-top: 15px; box-shadow: 0 0 15px #ffcc00; transition: 0.2s;}
+        .claim-btn:hover { background-color: #fff; transform: scale(1.05); }
     </style>
 </head>
 <body>
@@ -84,6 +87,7 @@
             <h1 id="endTitle" style="color: red; font-size: 45px; margin-top: 0; text-shadow: 0px 0px 20px red;">HULL DESTROYED</h1>
             <p style="color: white; font-size: 24px;">Final Score: <span id="finalScore">0</span></p>
             <button class="reboot-btn" onclick="restartGame()">REBOOT PROTECTOR</button>
+            <button class="claim-btn" onclick="claimMyRewards()">💰 CLAIM REWARDS</button>
         </div>
     </div>
 
@@ -96,8 +100,6 @@
 
     <script>
         // --- SAFE PLAY.FUN SDK INITIALIZATION ---
-        // This try/catch ensures that if the SDK fails or the Game ID is bugged,
-        // it will NOT crash the visual game graphics. 
         let ogp = null;
         window.addEventListener('load', () => {
             try {
@@ -110,7 +112,7 @@
             }
         });
 
-        // Safe function to add points without crashing
+        // Safe function to add points
         function sendPointsSafely(points) {
             if (ogp && typeof ogp.addPoints === 'function') {
                 try { ogp.addPoints(points); } catch(e) {}
@@ -124,77 +126,41 @@
             }
         }
 
-
-        // --- UPGRADED AUDIO ENGINE ---
-        let audioCtx;
-        let musicInterval;
-
-        function initAudio() {
+        // --- NEW: REWARDS API INTEGRATION ---
+        async function claimMyRewards() {
+            if (!ogp) {
+                alert("Please play on the official play.fun platform to claim your tokens!");
+                return;
+            }
             try {
-                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-            } catch(e) { console.log("Audio not supported"); }
+                const rewards = await ogp.listUserRewards();
+                console.log('Available Rewards:', rewards);
+                alert("Reward Request Sent! ✅\n\nCheck the Play.fun dashboard below your game screen to finalize and claim your tokens directly to your wallet.");
+            } catch (e) {
+                console.log("Reward claim error:", e);
+                alert("Make sure your wallet is connected to Play.fun to claim your rewards!");
+            }
         }
 
-        function playRetroMusic() {
-            if (musicInterval) clearInterval(musicInterval);
-            const notes = [36, 36, 39, 36, 43, 41, 36, 34];
-            let step = 0;
-            
-            musicInterval = setInterval(() => {
-                try {
-                    if(!audioCtx || isGameOver) return;
-                    let time = audioCtx.currentTime;
+        // --- CUSTOM AUDIO TRACK ENGINE ---
+        const bgMusic = new Audio('track1.mp3');
+        bgMusic.loop = true;
+        bgMusic.volume = 0.5;
 
-                    let osc1 = audioCtx.createOscillator();
-                    let osc2 = audioCtx.createOscillator();
-                    let gain = audioCtx.createGain();
-                    
-                    osc1.type = 'sawtooth';
-                    osc1.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
-                    osc2.type = 'square'; 
-                    osc2.frequency.value = (440 * Math.pow(2, (notes[step] - 69) / 12)) / 2;
-                    
-                    osc1.connect(gain);
-                    osc2.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    
-                    gain.gain.setValueAtTime(0.06, time); 
-                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.15);
-                    
-                    osc1.start(time); osc1.stop(time + 0.15);
-                    osc2.start(time); osc2.stop(time + 0.15);
-
-                    if (step % 4 === 0) {
-                        let kickOsc = audioCtx.createOscillator();
-                        let kickGain = audioCtx.createGain();
-                        kickOsc.connect(kickGain);
-                        kickGain.connect(audioCtx.destination);
-                        
-                        kickOsc.frequency.setValueAtTime(150, time);
-                        kickOsc.frequency.exponentialRampToValueAtTime(0.001, time + 0.1);
-                        
-                        kickGain.gain.setValueAtTime(0.15, time);
-                        kickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
-                        
-                        kickOsc.start(time); kickOsc.stop(time + 0.1);
-                    }
-                    step = (step + 1) % notes.length;
-                } catch(e) {}
-            }, 130); 
+        function playRealMusic() {
+            bgMusic.play().catch(e => {
+                console.log("Audio failed to start. Ensure track1.mp3 is uploaded to GitHub.");
+            });
         }
 
         function playShootSFX() {
             try {
-                if(!audioCtx) return;
-                let o = audioCtx.createOscillator(), g = audioCtx.createGain();
-                o.type = 'square';
-                o.frequency.setValueAtTime(600, audioCtx.currentTime);
-                o.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
-                o.connect(g); g.connect(audioCtx.destination);
-                g.gain.setValueAtTime(0.03, audioCtx.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
-                o.start(); o.stop(audioCtx.currentTime + 0.1);
+                let ctx = new (window.AudioContext || window.webkitAudioContext)();
+                let o = ctx.createOscillator(), g = ctx.createGain();
+                o.type = 'square'; o.frequency.setValueAtTime(800, ctx.currentTime);
+                o.connect(g); g.connect(ctx.destination);
+                g.gain.setValueAtTime(0.02, ctx.currentTime);
+                o.start(); o.stop(ctx.currentTime + 0.05);
             } catch(e) {}
         }
 
@@ -204,6 +170,8 @@
         const ctx = canvas.getContext('2d');
         let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
         let lastShotTime = 0, lastHeadRocketTime = 0, bossAlertText = "", bossAlertTimer = 0;
+        
+        let survivalPointTimer; // <-- NEW: Timer for constant points
 
         const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
         const keys = { ArrowLeft: false, ArrowRight: false, Space: false };
@@ -215,10 +183,21 @@
 
         function startGame() {
             document.getElementById('startOverlay').style.display = 'none';
-            initAudio();
-            playRetroMusic();
+            playRealMusic();
             spawnWave();
             updateHP();
+            
+            // --- CONSTANT COIN GENERATOR ---
+            // Gives the player points continuously just for surviving
+            if (survivalPointTimer) clearInterval(survivalPointTimer);
+            survivalPointTimer = setInterval(() => {
+                if (!isGameOver) {
+                    score += 5; // Adds 5 points every second
+                    sendPointsSafely(5); // Sends it directly to Play.fun widget
+                    document.getElementById('scoreDisplay').innerText = "Score: " + score;
+                }
+            }, 1000);
+            
             animate();
         }
 
@@ -550,9 +529,9 @@
 
         function endGame() { 
             isGameOver = true; 
-            document.getElementById('gameOverScreen').style.display = 'block'; 
+            if (survivalPointTimer) clearInterval(survivalPointTimer); // Stops the passive points
+            document.getElementById('gameOverScreen').style.display = 'flex'; 
             document.getElementById('finalScore').innerText = score; 
-            if(musicInterval) clearInterval(musicInterval); 
             sendGameOverSafely(); 
         }
         
