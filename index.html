@@ -95,61 +95,128 @@
     </div>
 
     <script>
-        // --- PLAY.FUN SDK INITIALIZATION ---
-        // We initialize the Frontend SDK immediately so it connects to the widget.
-        let ogp = null;
-        try {
-            if (typeof OpenGameSDK !== 'undefined') {
-                ogp = new OpenGameSDK();
-                ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
+        // --- 2. CREATE SDK INSTANCE & INITIALIZE ---
+        // This fires instantly so the widget connects perfectly
+        const ogp = new OpenGameSDK();
+        ogp.init({ gameId: '87a38bcf-15f2-4524-ab5a-3e1253415e45' });
+
+        // --- GLOBAL POINTS HANDLER ---
+        // This links your visual score to the Play.fun SDK widget in real-time
+        let score = 0;
+        function recordPoints(pts) {
+            score += pts;
+            document.getElementById('scoreDisplay').innerText = "Score: " + score;
+            if (pts > 0) {
+                // 3. CALL addPoints() DURING GAMEPLAY
+                try {
+                    ogp.addPoints(pts);
+                } catch (error) {
+                    console.log("Play.fun SDK point sync pending...");
+                }
             }
-        } catch (e) {
-            console.log("Play.fun SDK initialization error.");
         }
 
-        // Wrapper to safely push points to the Play.fun widget
-        function sendPointsSafely(points) {
-            if (ogp && typeof ogp.addPoints === 'function') {
-                try { ogp.addPoints(points); } catch(e) {}
-            }
+        // --- CATCHY 8-BIT AUDIO ENGINE ---
+        let audioCtx;
+        let musicInterval;
+
+        function initAudio() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch(e) { console.log("Audio not supported"); }
         }
 
-        // --- MP3 AUDIO ENGINE ---
-        const bgMusic = new Audio('track1.mp3.mp3');
-        bgMusic.loop = true;
-        bgMusic.volume = 0.5;
+        function playRetroMusic() {
+            if (musicInterval) clearInterval(musicInterval);
+            const notes = [45, 45, 48, 45, 52, 45, 50, 48];
+            let step = 0;
+            
+            musicInterval = setInterval(() => {
+                try {
+                    if(!audioCtx || isGameOver) return;
+                    let time = audioCtx.currentTime;
 
-        function playRealMusic() {
-            bgMusic.play().catch(e => {
-                console.log("Audio failed to start. Ensure track1.mp3 is uploaded to GitHub.");
-            });
+                    let osc1 = audioCtx.createOscillator();
+                    let osc2 = audioCtx.createOscillator();
+                    let gain = audioCtx.createGain();
+                    
+                    osc1.type = 'square';
+                    osc1.frequency.value = 440 * Math.pow(2, (notes[step] - 69) / 12);
+                    osc2.type = 'triangle'; 
+                    osc2.frequency.value = (440 * Math.pow(2, (notes[step] - 69) / 12)) / 2;
+                    
+                    osc1.connect(gain);
+                    osc2.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    
+                    gain.gain.setValueAtTime(0.04, time); 
+                    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+                    
+                    osc1.start(time); osc1.stop(time + 0.1);
+                    osc2.start(time); osc2.stop(time + 0.1);
+
+                    // Kick Drum
+                    if (step % 4 === 0) {
+                        let kickOsc = audioCtx.createOscillator();
+                        let kickGain = audioCtx.createGain();
+                        kickOsc.connect(kickGain);
+                        kickGain.connect(audioCtx.destination);
+                        
+                        kickOsc.frequency.setValueAtTime(150, time);
+                        kickOsc.frequency.exponentialRampToValueAtTime(0.001, time + 0.1);
+                        
+                        kickGain.gain.setValueAtTime(0.2, time);
+                        kickGain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+                        
+                        kickOsc.start(time); kickOsc.stop(time + 0.1);
+                    }
+
+                    // Hi-Hat
+                    if (step % 4 === 2) {
+                        let hatOsc = audioCtx.createOscillator();
+                        let hatGain = audioCtx.createGain();
+                        hatOsc.type = 'square';
+                        hatOsc.connect(hatGain);
+                        hatGain.connect(audioCtx.destination);
+                        
+                        hatOsc.frequency.setValueAtTime(8000, time); 
+                        hatGain.gain.setValueAtTime(0.015, time); 
+                        hatGain.gain.exponentialRampToValueAtTime(0.001, time + 0.05);
+                        
+                        hatOsc.start(time); hatOsc.stop(time + 0.05);
+                    }
+
+                    step = (step + 1) % notes.length;
+                } catch(e) {}
+            }, 140); 
         }
 
         function playShootSFX() {
             try {
-                let ctx = new (window.AudioContext || window.webkitAudioContext)();
-                let o = ctx.createOscillator(), g = ctx.createGain();
+                if(!audioCtx) return;
+                let o = audioCtx.createOscillator(), g = audioCtx.createGain();
                 o.type = 'sawtooth';
-                o.frequency.setValueAtTime(880, ctx.currentTime);
-                o.frequency.exponentialRampToValueAtTime(110, ctx.currentTime + 0.15); 
-                o.connect(g); g.connect(ctx.destination);
-                g.gain.setValueAtTime(0.08, ctx.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
-                o.start(); o.stop(ctx.currentTime + 0.15);
+                o.frequency.setValueAtTime(880, audioCtx.currentTime);
+                o.frequency.exponentialRampToValueAtTime(110, audioCtx.currentTime + 0.15); 
+                o.connect(g); g.connect(audioCtx.destination);
+                g.gain.setValueAtTime(0.08, audioCtx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.15);
+                o.start(); o.stop(audioCtx.currentTime + 0.15);
             } catch(e) {}
         }
 
         function playExplosionSFX() {
             try {
-                let ctx = new (window.AudioContext || window.webkitAudioContext)();
-                let o = ctx.createOscillator(), g = ctx.createGain();
+                if(!audioCtx) return;
+                let o = audioCtx.createOscillator(), g = audioCtx.createGain();
                 o.type = 'square'; 
-                o.frequency.setValueAtTime(100, ctx.currentTime);
-                o.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
-                o.connect(g); g.connect(ctx.destination);
-                g.gain.setValueAtTime(0.15, ctx.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-                o.start(); o.stop(ctx.currentTime + 0.2);
+                o.frequency.setValueAtTime(100, audioCtx.currentTime);
+                o.frequency.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                o.connect(g); g.connect(audioCtx.destination);
+                g.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+                o.start(); o.stop(audioCtx.currentTime + 0.2);
             } catch(e) {}
         }
 
@@ -157,9 +224,8 @@
         // --- CORE GAME ENGINE ---
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        let animationId, score = 0, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
+        let animationId, level = 1, bombs = 1, isGameOver = false, isSpawning = false, isAutoMode = true;
         let lastShotTime = 0, lastHeadRocketTime = 0, bossAlertText = "", bossAlertTimer = 0;
-        
         let survivalPointTimer; 
 
         const player = { x: canvas.width / 2, y: canvas.height - 70, speed: 12, hp: 100, maxHp: 100, invulnTimer: 0 };
@@ -172,20 +238,18 @@
 
         function startGame() {
             document.getElementById('startOverlay').style.display = 'none';
-            playRealMusic();
+            initAudio();
+            playRetroMusic(); 
             spawnWave();
             updateHP();
             
-            // CONSTANT COIN GENERATOR
-            // Safely batches points to prevent rate-limiting the API (25 points every 5 seconds)
+            // IDLE COIN MINER - Matches the functionality of Capybara Simulator
             if (survivalPointTimer) clearInterval(survivalPointTimer);
             survivalPointTimer = setInterval(() => {
                 if (!isGameOver) {
-                    score += 25; 
-                    sendPointsSafely(25); 
-                    document.getElementById('scoreDisplay').innerText = "Score: " + score;
+                    recordPoints(5); // Gives 5 points to player every 1 second they stay alive
                 }
-            }, 5000); 
+            }, 1000); 
             
             animate();
         }
@@ -227,14 +291,12 @@
                 bombs--; document.getElementById('bombDisplay').innerText = `💥 Bombs: ${bombs}`;
                 let visibleEnemies = enemies.filter(e => e.y > 0);
                 
-                let pts = visibleEnemies.length * 10;
-                score += pts;
-                if (pts > 0) { sendPointsSafely(pts); }
+                recordPoints(visibleEnemies.length * 10);
 
                 enemies = []; bossProjectiles = [];
                 if (activeBoss && activeBoss.y > 0) { activeBoss.hp -= 1500; createExplosion(activeBoss.x, activeBoss.y, "orange", 50); }
                 ctx.fillStyle = "white"; ctx.fillRect(0, 0, canvas.width, canvas.height);
-                document.getElementById('scoreDisplay').innerText = "Score: " + score; checkLevelComplete();
+                checkLevelComplete();
             }
         }
 
@@ -414,10 +476,8 @@
                 createExplosion(activeBoss.x, activeBoss.y, activeBoss.color, 200);
                 
                 let bPts = (activeBoss.levelType === 20) ? 50000 : 2000 * level;
-                score += bPts;
-                sendPointsSafely(bPts);
+                recordPoints(bPts);
 
-                document.getElementById('scoreDisplay').innerText = "Score: " + score;
                 activeBoss = null; bossProjectiles = []; checkLevelComplete(); 
             }
         }
@@ -509,23 +569,29 @@
                     if (enemy.y > 0 && p.x > enemy.x - 25 && p.x < enemy.x + 25 && p.y < enemy.y + 25 && p.y + p.height > enemy.y - 25) {
                         createExplosion(enemy.x, enemy.y, "#00ff00", 20); enemies.splice(eIndex, 1); if (level < 10 && p.type === 'laser') projectiles.splice(pIndex, 1); 
                         
-                        score += 10; 
-                        sendPointsSafely(10);
-                        document.getElementById('scoreDisplay').innerText = "Score: " + score; checkLevelComplete();
+                        recordPoints(10);
+                        checkLevelComplete();
                     }
                 });
             });
         }
 
-        function endGame() { 
+        // --- 4. END GAME & FINALIZE POINTS (From Manual Screenshot 1192) ---
+        async function endGame() { 
             isGameOver = true; 
             if (survivalPointTimer) clearInterval(survivalPointTimer); 
+            if (musicInterval) clearInterval(musicInterval);
+
             document.getElementById('gameOverScreen').style.display = 'flex'; 
             document.getElementById('finalScore').innerText = score; 
             
-            // This safely finalizes all points with the SDK!
+            // "Ends the current game round and commits all points"
             if (ogp && typeof ogp.endGame === 'function') {
-                try { ogp.endGame(); } catch(e) {}
+                try {
+                    await ogp.endGame(); 
+                } catch (e) {
+                    console.log("Play.fun endGame error:", e);
+                }
             }
         }
         
